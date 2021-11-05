@@ -60,6 +60,10 @@ typings/
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 
+# tsc build output
+functions/build/
+
+
 # next.js build output
 .next
 
@@ -74,3 +78,6 @@ typings/
 
 # FuseBox cache
 .fusebox/
+
+# VS Code
+.vscode/
