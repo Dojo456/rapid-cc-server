@@ -2,8 +2,7 @@ import {HttpFunction} from '@google-cloud/functions-framework/build/src/function
 import { randomUUID } from 'crypto';
 import {OAuth2Client} from 'google-auth-library';
 import { calendar_v3, google } from 'googleapis';
-import jwtDecode from 'jwt-decode';
-import {CalendarEvent, Individual} from '../models';
+import { CalendarEvent, Individual } from './models';
 
 const CLIENT_ID =
   '436668816969-l4uica2hifv8ua5sbsaokj5dfoboje2u.apps.googleusercontent.com';
