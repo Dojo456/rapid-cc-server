@@ -7,6 +7,11 @@ import { CalendarEvent, Individual } from './models';
 const CLIENT_ID =
   '436668816969-l4uica2hifv8ua5sbsaokj5dfoboje2u.apps.googleusercontent.com';
 
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://poetic-tube-331012.web.app"
+]
+
 /*
 Function Arguments:
 {
@@ -14,7 +19,16 @@ Function Arguments:
 }
 */
 export const getCalendar: HttpFunction = async (req, res) => {
-  res.set('Access-Control-Allow-Origin', "http://localhost:3000, https://poetic-tube-331012.web.app")
+  const origin = req.headers.origin
+
+  if (origin) {
+    if (allowedOrigins.includes(origin)) {
+      res.set('Access-Control-Allow-Origin', origin)
+    }
+    else {
+      res.status(403).send("Origin not allowed")
+    }
+  }
 
   if (req.method === 'OPTIONS') {
     // CORS Preflight
