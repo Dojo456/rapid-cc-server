@@ -14,7 +14,7 @@ Function Arguments:
 }
 */
 export const getCalendar: HttpFunction = async (req, res) => {
-  res.set('Access-Control-Allow-Origin', "http://localhost:3000")
+  res.set('Access-Control-Allow-Origin', "http://localhost:3000, https://poetic-tube-331012.web.app")
 
   if (req.method === 'OPTIONS') {
     // CORS Preflight

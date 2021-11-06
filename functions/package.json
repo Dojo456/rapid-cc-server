@@ -10,7 +10,7 @@
     "clean": "gts clean",
     "compile": "tsc",
     "fix": "gts fix",
-    "deploy": "npx cpx \"package.json\" \"./build/src\" && gcloud functions deploy getCalendar --source=build/src --runtime nodejs14 --allow-unauthenticated"
+    "deploy": "tsc && npx cpx \"package.json\" \"./build/src\" && gcloud functions deploy getCalendar --source=build/src --runtime nodejs14 --allow-unauthenticated"
   },
   "repository": {
     "type": "git",
