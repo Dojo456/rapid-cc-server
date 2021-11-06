@@ -1,7 +1,9 @@
 import {HttpFunction} from '@google-cloud/functions-framework/build/src/functions';
 import { randomUUID } from 'crypto';
 import {OAuth2Client} from 'google-auth-library';
-import {CalendarEvent} from '../models';
+import { calendar_v3, google } from 'googleapis';
+import jwtDecode from 'jwt-decode';
+import {CalendarEvent, Individual} from '../models';
 
 const CLIENT_ID =
   '436668816969-l4uica2hifv8ua5sbsaokj5dfoboje2u.apps.googleusercontent.com';
@@ -9,35 +11,55 @@ const CLIENT_ID =
 /*
 Function Arguments:
 {
-    id_token: id_token obj
+    id_token: token obj
 }
 */
 export const getCalendar: HttpFunction = async (req, res) => {
   res.set('Access-Control-Allow-Origin', "http://localhost:3000")
-  res.set('Access-Control-Allow-Methods', 'GET, POST');
 
-  // const token = req.body.id_token;
+  if (req.method === 'OPTIONS') {
+    // CORS Preflight
+    res.set('Access-Control-Allow-Methods', 'POST');
+    res.set('Access-Control-Max-Age', '3600');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).send('');
+  }
+  else {
+    try {
+      const idToken = JSON.parse(req.body.id_token);
 
-  // if (!token) {
-  //   res.status(400).send('Missing id_token');
-  //   return;
-  // }
+      if (!idToken) {
+        res.status(400).send('Missing function parameters');
+        return;
+      }
+    
+      const oAuth2Client = new OAuth2Client(CLIENT_ID);
+      const validToken = await verify(idToken.id_token, oAuth2Client)
+    
+      if (!validToken.valid) {
+          res.status(403).send(validToken.message)
+          return
+      }
+  
+      oAuth2Client.setCredentials(idToken)
+  
+      console.log(idToken)
+   
+      const eventsPromise = fetchEventsFromAPI(oAuth2Client, new Date());
 
-  // const oAuth2Client = new OAuth2Client(CLIENT_ID);
-  // const validToken = await verify(token, oAuth2Client)
-
-  // if (!validToken.valid) {
-  //     res.status(403).send(validToken.message)
-  // }
-
-  const returner = await fetchEventsFromAPI(10, new Date());
-
-  res.status(200).send(returner);
+      eventsPromise.then(events => {
+        res.status(200).send(events);
+      })
+      .catch(error => {
+        res.status(500).send(error)
+      })
+    } catch (error) {
+      res.status(500).send(error)
+    }
+  }
 };
 
-async function fetchEventsFromAPI(count: number, today: Date): Promise<CalendarEvent[]> {
-  const returner: CalendarEvent[] = [];
-
+async function fetchEventsFromAPI(auth: OAuth2Client, today: Date): Promise<CalendarEvent[]> {
   function getDateRange(date: Date): {start: Date; end: Date} {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -53,34 +75,77 @@ async function fetchEventsFromAPI(count: number, today: Date): Promise<CalendarE
     return {start, end};
   }
 
-  function newEvent(date: Date): CalendarEvent {
-    return {
-      label: 'today',
-      date: date,
-      eventID: randomUUID(),
-      attendees: [
-        {
-          name: 'Daniel',
-          email: 'yazhengliao@gmail.com',
-        },
-      ],
-    };
+  const dateRange = getDateRange(today)
+
+  const calendar = google.calendar({version: 'v3', auth});
+  const resp = await calendar.events.list({
+    calendarId: 'primary',
+    singleEvents: true,
+    orderBy: "startTime",
+    timeMin: dateRange.start.toISOString(),
+    timeMax: dateRange.end.toISOString()
+  })
+
+  const events = resp.data.items;
+
+  function parseDate(event: calendar_v3.Schema$Event): Date {
+    if (event.start) {
+      if (event.start.dateTime) {
+        return new Date(event.start.dateTime)
+      }
+      else if (event.start.date) {
+        return new Date(event.start.date)
+      }
+      else {
+        throw new ReferenceError
+      }
+    }
+    else if (event.end) {
+      if (event.end.dateTime) {
+        return new Date(event.end.dateTime)
+      }
+      else if (event.end.date) {
+        return new Date(event.end.date)
+      }
+      else {
+        throw new ReferenceError
+      }
+    }
+    else {
+      throw new ReferenceError
+    }
   }
 
-  // Below function taken from https://www.codegrepper.com/code-examples/javascript/generate+random+date+in+javascript
-  function randomDate(start: Date, end: Date) {
-    return new Date(
-      start.getTime() + Math.random() * (end.getTime() - start.getTime())
-    );
+  if (events) {
+    const returner: CalendarEvent[] = []
+
+    events.forEach((event) => {
+      try {
+        const calendarEvent: CalendarEvent | null = {
+          label: event.summary ? event.summary : "",
+          date: parseDate(event),
+          eventID: event.id ? event.id : randomUUID(),
+          attendees: event.attendees ? event.attendees.map(attendee => {
+            const individual: Individual = {
+              name: attendee.displayName ? attendee.displayName : "Unknown",
+              email: attendee.email ? attendee.email : "Unknown"
+            }
+    
+            return individual
+          }) : []
+        }
+    
+        returner.push(calendarEvent)
+      } catch (error) {
+        // Do nothing here since the event cannot be parsed correctly and hence cannot be contact traced
+      }
+    });
+
+    return returner
   }
-
-  const dateRange = getDateRange(today);
-
-  for (let i = 0; i < count; i++) {
-    returner.push(newEvent(randomDate(dateRange.start, dateRange.end)));
+  else {
+    return []
   }
-
-  return returner;
 }
 
 async function verify(
