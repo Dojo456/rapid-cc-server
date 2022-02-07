@@ -5,7 +5,7 @@ export type Individual = {
 
 export type CalendarEvent = {
   label: string;
-  inPerson?: boolean;
+  inPerson: boolean;
   attendees: Individual[];
   eventID: string;
   date: Date;

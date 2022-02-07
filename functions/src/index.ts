@@ -1,7 +1,7 @@
 import {HttpFunction} from '@google-cloud/functions-framework/build/src/functions';
 import { randomUUID } from 'crypto';
 import {OAuth2Client} from 'google-auth-library';
-import { calendar_v3, google } from 'googleapis';
+import { blogger_v2, calendar_v3, google } from 'googleapis';
 import { CalendarEvent, Individual } from './models';
 
 const CLIENT_ID =
@@ -104,32 +104,72 @@ async function fetchEventsFromAPI(auth: OAuth2Client, today: Date): Promise<Cale
 
   const events = resp.data.items;
 
-  function parseDate(event: calendar_v3.Schema$Event): Date {
-    if (event.start) {
-      if (event.start.dateTime) {
-        return new Date(event.start.dateTime)
+  function parseEvent(event: calendar_v3.Schema$Event): CalendarEvent {
+    function parseDate(event: calendar_v3.Schema$Event): Date {
+      if (event.start) {
+        if (event.start.dateTime) {
+          return new Date(event.start.dateTime)
+        }
+        else if (event.start.date) {
+          return new Date(event.start.date)
+        }
+        else {
+          throw new ReferenceError
+        }
       }
-      else if (event.start.date) {
-        return new Date(event.start.date)
+      else if (event.end) {
+        if (event.end.dateTime) {
+          return new Date(event.end.dateTime)
+        }
+        else if (event.end.date) {
+          return new Date(event.end.date)
+        }
+        else {
+          throw new ReferenceError
+        }
       }
       else {
         throw new ReferenceError
       }
     }
-    else if (event.end) {
-      if (event.end.dateTime) {
-        return new Date(event.end.dateTime)
+
+    function getInPerson(event:  calendar_v3.Schema$Event): boolean {
+      const hasLocation = !!event.location
+
+      let hasMeetingLink = !!event.hangoutLink
+
+      const description = event.description
+      if (description !== undefined && description !== null) {
+        const keywords = ["zoom", "skype", "facetime"]
+
+        const results = description.match(new RegExp(keywords.join("|"), "i"))
+
+        hasMeetingLink = hasMeetingLink || !results
       }
-      else if (event.end.date) {
-        return new Date(event.end.date)
-      }
-      else {
-        throw new ReferenceError
+
+      if (hasLocation) {
+        return true
+      } else {
+        return !hasMeetingLink
       }
     }
-    else {
-      throw new ReferenceError
+
+    const calendarEvent: CalendarEvent = {
+      label: event.summary ? event.summary : "",
+      date: parseDate(event),
+      inPerson: getInPerson(event),
+      eventID: event.id ? event.id : randomUUID(),
+      attendees: event.attendees ? event.attendees.map(attendee => {
+        const individual: Individual = {
+          name: attendee.displayName ? attendee.displayName : "Unknown",
+          email: attendee.email ? attendee.email : "Unknown"
+        }
+
+        return individual
+      }) : []
     }
+
+    return calendarEvent
   }
 
   if (events) {
@@ -137,19 +177,7 @@ async function fetchEventsFromAPI(auth: OAuth2Client, today: Date): Promise<Cale
 
     events.forEach((event) => {
       try {
-        const calendarEvent: CalendarEvent | null = {
-          label: event.summary ? event.summary : "",
-          date: parseDate(event),
-          eventID: event.id ? event.id : randomUUID(),
-          attendees: event.attendees ? event.attendees.map(attendee => {
-            const individual: Individual = {
-              name: attendee.displayName ? attendee.displayName : "Unknown",
-              email: attendee.email ? attendee.email : "Unknown"
-            }
-    
-            return individual
-          }) : []
-        }
+        const calendarEvent = parseEvent(event)
     
         returner.push(calendarEvent)
       } catch (error) {
