@@ -24,6 +24,7 @@ export const getCalendar: HttpFunction = async (req, res) => {
   if (origin) {
     if (allowedOrigins.includes(origin)) {
       res.set('Access-Control-Allow-Origin', origin)
+      res.set('Access-Control-Allow-Headers', "content-type")
     }
     else {
       res.status(403).send("Origin not allowed")
@@ -97,6 +98,8 @@ async function fetchEventsFromAPI(auth: OAuth2Client, today: Date): Promise<Cale
     orderBy: "startTime",
     timeMin: dateRange.start.toISOString(),
     timeMax: dateRange.end.toISOString()
+  }).catch((reason) => {
+    throw new Error(reason)
   })
 
   const events = resp.data.items;
